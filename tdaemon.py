@@ -10,6 +10,7 @@ The present code is published under the terms of the MIT License. See LICENSE
 file for more details.
 """
 
+from __future__ import print_function
 
 import sys
 import os
@@ -19,7 +20,8 @@ import hashlib
 import subprocess
 import datetime
 import re
-import subprocess
+
+if sys.version[0]=="2": input=raw_input
 
 SPECIAL_CHARS_REGEX_PATTERN = r'[#&;`|*?~<>^()\[\]{}$\\]+' 
 IGNORE_EXTENSIONS = ('pyc', 'pyo')
@@ -45,7 +47,7 @@ class CancelDueToUserRequest(Exception):
 def ask(message='Are you sure? [y/N]'):
     """Asks the user his opinion."""
     agree = False
-    answer = raw_input(message).lower()
+    answer = input(message).lower()
     if answer.startswith('y'):
         agree = True
     return agree
@@ -64,7 +66,7 @@ class Watcher(object):
     debug = False
 
     def __init__(self, file_path, test_program, debug=False, custom_args='', 
-        ignore_dirs=None, quiet=False):
+        ignore_dirs=None, quiet=False, encoding='utf-8'):
         # Safe filter
         custom_args = escapearg(custom_args)
 
@@ -72,7 +74,7 @@ class Watcher(object):
         self.ignore_dirs = list(IGNORE_DIRS)
         if ignore_dirs:
             self.ignore_dirs.extend([d for d in ignore_dirs.split(',')])
-        self.file_list = self.walk(file_path)
+        self.file_list = self.walk(file_path, encoding=encoding)
         self.test_program = test_program
         self.custom_args = custom_args
         self.quiet = quiet
@@ -175,9 +177,10 @@ class Watcher(object):
                 return False
         return True
 
-    def walk(self, top, file_list={}):
+    def walk(self, top, file_list={}, encoding='utf-8'):
         """Walks the walk. nah, seriously: reads the file and stores a hashkey
         corresponding to its content."""
+
         for root, dirs, files in os.walk(top, topdown=False):
             if os.path.basename(root) in self.ignore_dirs:
                 # Do not dig in ignored dirs
@@ -188,12 +191,12 @@ class Watcher(object):
                 if self.include(full_path):
                     if os.path.isfile(full_path):
                         # preventing fail if the file vanishes
-                        content = open(full_path).read()
+                        content = open(full_path).read().encode(encoding)
                         hashcode = hashlib.sha224(content).hexdigest()
                         file_list[full_path] = hashcode
             for name in dirs:
                 if name not in self.ignore_dirs:
-                    self.walk(os.path.join(root, name), file_list)
+                    self.walk(os.path.join(root, name), file_list, encoding)
         return file_list
 
     def file_sizes(self):
@@ -206,16 +209,16 @@ class Watcher(object):
         """Extracts differences between lists. For debug purposes"""
         for key in list1:
             if key in list2 and list2[key] != list1[key]:
-                print key
+                print(key)
             elif key not in list2:
-                print key
+                print(key)
 
     def run(self, cmd):
         """Runs the appropriate command"""
-        print datetime.datetime.now()
+        print(datetime.datetime.now())
         output = subprocess.Popen(cmd, shell=True)
         output = output.communicate()[0]
-        print output
+        print(output)
 
     def run_tests(self):
         """Execute tests"""
@@ -247,6 +250,9 @@ def main(prog_args=None):
         '`symfony`, `jelix` `phpunit` and `tox`')
     parser.add_option("-d", "--debug", dest="debug", action="store_true",
         default=False)
+    parser.add_option('-e', '--file-encoding', dest='file_encoding', default='utf-8',
+        type="str",
+        help="Encoding of files")
     parser.add_option('-s', '--size-max', dest='size_max', default=25,
         type="int", help="Sets the maximum size (in MB) of files.")
     parser.add_option('--custom-args', dest='custom_args', default='',
@@ -269,7 +275,7 @@ def main(prog_args=None):
 
     try:
         watcher = Watcher(path, opt.test_program, opt.debug, opt.custom_args, 
-            opt.ignore_dirs, opt.quiet)
+            opt.ignore_dirs, opt.quiet, opt.file_encoding)
         watcher_file_size = watcher.file_sizes()
         if watcher_file_size > opt.size_max:
             message =  "It looks like the total file size (%dMb) is larger  than the `max size` option (%dMb).\nThis may slow down the file comparison process, and thus the daemon performances.\nDo you wish to continue? [y/N] " % (watcher_file_size, opt.size_max)
@@ -277,15 +283,15 @@ def main(prog_args=None):
             if not opt.quiet and not ask(message):
                 raise CancelDueToUserRequest('Ok, thx, bye...')
 
-        print "Ready to watch file changes..."
+        print("Ready to watch file changes...")
         watcher.loop()
     except (KeyboardInterrupt, SystemExit):
         # Ignore when you exit via Crtl-C
         pass
-    except Exception, msg:
-        print msg
+    except Exception as msg:
+        print(msg)
 
-    print "Bye"
+    print("Bye")
 
 if __name__ == '__main__':
     main()
